@@ -1,5 +1,4 @@
-#!/usr/bin/env python
-class NotSupported(Exception): pass
+#!/usr/bin/env python3
 
 class Generator(object):
     __trigger = (
@@ -46,52 +45,45 @@ class Generator(object):
         self.relations = []
 
     def parse(self, name):
-        file = open(name)
         mtm_rlts = []
 
-        while True:
-            line = file.readline().strip().lower()
+        with open(name) as file:
+            while True:
+                line = file.readline().strip().lower()
 
-            if not line:
-                break                
+                if not line:
+                    break
+                table = line.rstrip(':')
+                query = 'CREATE TABLE {table}({table}_id serial PRIMARY KEY, '.format(table=table)
+                line = file.readline().strip().lower()
+                if line == 'fields:':
+                    while True:
+                        line = file.readline().strip().lower()
 
-            table = line.rstrip(':')
-            query = 'CREATE TABLE {table}({table}_id serial PRIMARY KEY, '.format(table=table)
-
-            line = file.readline().strip().lower()
-            if line == 'fields:':
-                while True:
-                    line = file.readline().strip().lower()
-
-                    if line == 'relations:':
-                        while True:
-                            line = file.readline().strip().lower()
-                            
-                            if not line:
-                                break
-
-                            rel_table, relation = line.split(': ')
-                            if relation == 'one':
-                                self.relations.append(self.__one_to_many.format(child=table, 
-                                                                                parent=rel_table))
-                            elif relation == 'many':
-                                mtm_rlts.append([table, rel_table])
-
-                    if not line:
-                        break
-
-                    column, type = line.split(': ')
-                    query += '{table}_{column} {type}, '.format(table=table, 
-                                                                column=column, 
-                                                                type=type)
-                query += ('{table}_created timestamp DEFAULT now(), '
-                          '{table}_updated timestamp DEFAULT now());'
-                         ).format(table=table)
-                self.tables.append(query)
-                self.triggers.append(self.__trigger.format(table=table))
+                        if line == 'relations:':
+                            while True:
+                                line = file.readline().strip().lower()                            
+                                if not line:
+                                    break
+                                rel_table, relation = line.split(': ')
+                                if relation == 'one':
+                                    self.relations.append(self.__one_to_many.format(child=table, 
+                                                                                    parent=rel_table))
+                                elif relation == 'many':
+                                    mtm_rlts.append([table, rel_table])
+                        if not line:
+                            break
+                        column, _type = line.split(': ')
+                        query += '{table}_{column} {type}, '.format(table=table, 
+                                                                    column=column, 
+                                                                    type=_type)
+                    query += ('{table}_created timestamp DEFAULT now(), '
+                              '{table}_updated timestamp DEFAULT now());'
+                             ).format(table=table)
+                    self.tables.append(query)
+                    self.triggers.append(self.__trigger.format(table=table))
         if mtm_rlts:
-            self.many_to_many(mtm_rlts)
-        
+            self.many_to_many(mtm_rlts)        
         return self.tables + self.relations + self.triggers 
 
     def many_to_many(self, relations):
@@ -108,4 +100,4 @@ class Generator(object):
 if __name__ == "__main__":
     generator = Generator()
     for i in generator.parse('yaml.yml'):
-        print i, '\n'
+        print(i, end='\n\n')
