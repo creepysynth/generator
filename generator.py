@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+class NotSupported(Exception): pass
 
 class Generator(object):
     __trigger = (
@@ -45,7 +46,7 @@ class Generator(object):
         self.relations = []
 
     def parse(self, name):
-        mtm_rlts = []
+        table_relations = []
 
         with open(name) as file:
             while True:
@@ -65,36 +66,52 @@ class Generator(object):
                                 line = file.readline().strip().lower()                            
                                 if not line:
                                     break
-                                rel_table, relation = line.split(': ')
-                                if relation == 'one':
-                                    self.relations.append(self.__one_to_many.format(child=table, 
-                                                                                    parent=rel_table))
-                                elif relation == 'many':
-                                    mtm_rlts.append([table, rel_table])
+                                _table, relation = line.split(': ')
+                                table_relations.append(table)
+                                table_relations.append({_table:relation})
                         if not line:
                             break
-                        column, _type = line.split(': ')
-                        query += '{table}_{column} {type}, '.format(table=table, 
-                                                                    column=column, 
-                                                                    type=_type)
-                    query += ('{table}_created timestamp DEFAULT now(), '
-                              '{table}_updated timestamp DEFAULT now());'
-                             ).format(table=table)
+                        column, _type = line.split(': ')                        
+                        query += '{table}_{column} {type}, '.format(
+                            table=table, 
+                            column=column, 
+                            type=_type
+                        )
+                    query += (
+                        '{table}_created timestamp DEFAULT now(), '
+                        '{table}_updated timestamp DEFAULT now());'
+                    ).format(table=table)
                     self.tables.append(query)
                     self.triggers.append(self.__trigger.format(table=table))
-        if mtm_rlts:
-            self.many_to_many(mtm_rlts)        
+        if table_relations:
+            self.built_relations(table_relations)        
         return self.tables + self.relations + self.triggers 
 
-    def many_to_many(self, relations):
-        for i in range(0, len(relations)):
-            for j in range(i+1, len(relations)):
-                if relations[i][0] == relations[j][1] and relations[i][1] == relations[j][0]:
-                    table1, table2 = sorted(relations[i])
-                    self.tables.append(self.__many_to_many_create.format(table1=table1,
-                                                                         table2=table2))
-                    self.relations.append(self.__many_to_many_alter.format(table1=table1,
-                                                                           table2=table2))
+    def built_relations(self, table_relations):
+        for i in range(0, len(table_relations), 2): 
+            table_1 = table_relations[i]
+            table_1_rels = table_relations[i+1]
+            for j in range(i+2, len(table_relations), 2):
+                table_2 = table_relations[j]
+                table_2_rels = table_relations[j+1]
+                relation_1 = table_2_rels.get(table_1, False)
+                relation_2 = table_1_rels.get(table_2, False)        
+
+                if relation_1 and relation_2:
+                    if relation_1 == 'many' and relation_2 == 'many':
+                        table_1, table_2 = sorted((table_1, table_2))
+                        self.tables.append(self.__many_to_many_create.format(table1=table_1,
+                                                                             table2=table_2))
+                        self.relations.append(self.__many_to_many_alter.format(table1=table_1,
+                                                                               table2=table_2))
+                    elif relation_1 == 'many' and relation_2 == 'one':
+                        self.relations.append(self.__one_to_many.format(child=table_1, 
+                                                                        parent=table_2))
+                    elif relation_1 == 'one' and relation_2 == 'many':
+                        self.relations.append(self.__one_to_many.format(child=table_2, 
+                                                                        parent=table_1))
+                    else:
+                        raise NotSupported
 
 
 if __name__ == "__main__":
